@@ -1,4 +1,4 @@
-#!/usr/bin/env rdmd -main
+#!/usr/bin/env "rdmd -L--main"
 
 import std.conv;
 import std.format;
@@ -23,6 +23,15 @@ enum Side {
   SELL
 };
 
+bool isBuy( Side s ) {
+  final switch(s) {
+  case Side.BUY:
+    return true;
+  case Side.SELL:
+    return false;
+  };
+};
+
 struct OrderState(OrderType = Order!()) {
   alias typeof(OrderType.PriceType_t.init * 100.0) Volume;
   
@@ -39,6 +48,8 @@ struct OrderState(OrderType = Order!()) {
   };
   
   auto avgPx() { return cumQty==0 ? 0.0 : volume / cumQty; };
+
+  alias order this;
   
   void handleExecution(ExecType)( ref ExecType exec) {
     cumQty += exec.qty;
@@ -69,7 +80,28 @@ struct OrderManager(OrderType = SimpleOrder,
   OrderState[] buys;
   OrderState[] sells;
 
+  ulong myClock = 0L;
+
+
+
+
+
+  
   void onOrder(ref OrderType order) {
+    myClock++;
+    auto side = order.side.isBuy() ? buys : sells;
+    if (side.isBuy) {
+      if (sells.isEmpty || order.limitPx < side[0].limitPx) {
+        //Not crossing buy
+        size_t idx = side.binarySearch(order);
+        writefln("Idx is %s", idx);
+        side = side[0:idx] ~ OrderState(order) ~ side[idx:$];
+      } else {
+        
+      };
+    } else {
+      
+    };
   };
 };
 
