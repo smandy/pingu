@@ -46,13 +46,13 @@ struct OrderState(OrderType = Order!()) {
   };
 };
 
-struct Order(PriceType = DefaultPriceType) {
+immutable struct Order(PriceType = DefaultPriceType) {
   alias PriceType PriceType_t;
-  
-  const int         orderQty;
-  const OrderType   orderType;
-  const TimeInForce timeInForce;
-  const PriceType   limitPx;
+  Side        side;
+  int         orderQty;
+  OrderType   orderType;
+  TimeInForce timeInForce;
+  PriceType   limitPx;
 };
 
 struct Execution(PriceType = DefaultPriceType) {
@@ -64,12 +64,21 @@ alias Order!()      SimpleOrder;
 alias OrderState!() SimpleOrderState;
 alias Execution!()  SimpleExecution;
 
+struct OrderManager(OrderType = SimpleOrder,
+                    OrderState = OrderState!OrderType) {
+  OrderState[] buys;
+  OrderState[] sells;
+
+  void onOrder(ref OrderType order) {
+  };
+};
+
 unittest {
   import std.stdio;
   
-  Order!() x  = { 100, OrderType.MARKET, TimeInForce.DAY, 0.0  };
-  Order!(int)    x2 = { 100, OrderType.MARKET, TimeInForce.DAY, 20   };
-  SimpleOrder    x3 = { 100, OrderType.MARKET, TimeInForce.DAY, 20.0 };
+  immutable Order!() x  = { Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 0.0  };
+  Order!(int)    x2 = { Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20   };
+  SimpleOrder    x3 = { Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20.0 };
 
   SimpleOrderState os = SimpleOrderState(x3);
   auto exec = SimpleExecution(25, 25.0);
