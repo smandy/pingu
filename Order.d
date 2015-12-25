@@ -81,11 +81,6 @@ struct OrderManager(OrderType = SimpleOrder,
   OrderState[] sells;
 
   ulong myClock = 0L;
-
-
-
-
-
   
   void onOrder(ref OrderType order) {
     myClock++;
