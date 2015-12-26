@@ -14,20 +14,6 @@ struct SimpleOrder {
 unittest {
   SimpleOrder[] orders;
   ulong counter;
-  size_t getTransitionIndex(alias test, V)(V v) {
-    size_t first = 0, count = orders.length;
-    while (count > 0) {
-      immutable step = count / 2, it = first + step;
-      if (!binaryFun!test(orders[it], v)) {
-        first = it + 1;
-        count -= step + 1;
-      } else {
-        count = step;
-      }
-    }
-    return first;
-  }
-  enum buyPred = "a.price>b.price && a.time<b.time";
   void  onOrder( SimpleOrder o) {
     size_t idx = getTransitionIndex!buyPred(o);
     //writefln("Idx is %s", idx);
