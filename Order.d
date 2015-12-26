@@ -10,7 +10,7 @@ import std.traits;
 
 alias double DefaultPriceType;
 alias ulong  DefaultOrderIdType;
-alias ulong  TimeType;
+alias ulong  DefaultTimeType;
 
 enum OrderType {
     MARKET,
@@ -28,6 +28,7 @@ enum Side {
   SELL
 };
 
+// Use me with UFCS
 bool isBuy( Side s ) {
   final switch(s) {
   case Side.BUY:
@@ -55,6 +56,7 @@ struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
       ~ to!string(order)
       ~ ",cumQty=" ~ to!string(cumQty)
       ~ ",volume=" ~ to!string(volume)
+      ~ ",avgPx=" ~ to!string(avgPx)
       ~ ",leavesQty=" ~ to!string(leavesQty)
       ~ ")";
   };
@@ -162,6 +164,7 @@ struct OrderManager(OrderType  = SimpleOrder,
       // enforce( !order.side.isBuy() , "Logic error");
       writefln("buys is %s", buys);
       if ( buys.empty || order.limitPx > buys[0].limitPx ) {
+        (order.side.isBuy() ? buys : sells) ~= OrderState(order);
         // TODO Not crossing sell - go onto book
         writefln("Not Crossing sell");
       } else {
@@ -226,6 +229,7 @@ void main() {
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 21.0) );
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 200, OrderType.LIMIT, TimeInForce.DAY, 20.0));
+    writefln("Final om state %s" , om);
   }
 };
 
