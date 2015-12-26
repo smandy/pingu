@@ -5,12 +5,16 @@ import std.algorithm;
 import std.format;
 import std.array;
 
-template Invoker(V,TS...) {
-  auto Invoker(V v) {
-    static if ( TS.length > 0) {
+template Invoker(TS...) {
+  auto Invoker(V)( V v ) {
+    return impl!(V, TS)(v);
+  }
+
+private:
+  auto impl(V, TS...)(V v) {
+    static if ( TS.length > 1) {
       auto nextArg = TS[0](v);
-      alias RetType = typeof(TS[0](v));
-      return Invoker!( RetType , TS[1..$] )( nextArg);
+      return impl!( typeof(nextArg), TS[1..$] )( nextArg);
     } else {
       return v;
     };
@@ -18,20 +22,25 @@ template Invoker(V,TS...) {
 };
 
 void main() {
-  auto x = Invoker!(string, doit, boit, goit)("Woot");
+  auto x = Invoker!(doit, boit, goit)("Woot");
   writeln(x);
 };
 
-string[] doit(string x) {
+auto doit(string x) {
   return x.map!( (dchar x) { return format("%s%s", x , x) ; } ).array;
 };
+
 
 auto boit(ReturnType!doit s) {
   return s.map!( x => x.length ).array;
 };
 
-string goit( ReturnType!boit s) {
+auto goit( ReturnType!boit s) {
   return "Goit(" ~ to!string(s) ~ ")";
 };
+
+pragma(msg, "doit " , ReturnType!doit);
+pragma(msg, "boit " , ReturnType!boit);
+pragma(msg, "boit " , ReturnType!goit);
 
 
