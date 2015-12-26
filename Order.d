@@ -6,6 +6,7 @@ import std.stdio;
 import std.range;
 import std.functional;
 import std.exception;
+import std.traits;
 
 alias double DefaultPriceType;
 alias ulong  DefaultOrderIdType;
@@ -36,7 +37,19 @@ bool isBuy( Side s ) {
   };
 };
 
-struct OrderState(OrderType = SimpleOrder) {
+template IsOrder(T) {
+  enum hasQty   = __traits(compiles, (T t) { return t.orderQty > 10; }   );
+  enum hasPrice = __traits(compiles, (T t) { return t.limitPx  > 20.0; } );
+  enum hasSide  = __traits(compiles, (T t) { return t.side == Side.BUY; } );
+
+  enum IsOrder = {
+    //pragma(msg, hasQty);
+    //pragma(msg, hasQty);
+    return hasQty && hasPrice && hasSide;
+  }();
+}
+
+struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
   string toString() {
     return "OrderState("
       ~ to!string(order)
@@ -73,9 +86,9 @@ struct OrderState(OrderType = SimpleOrder) {
   };
 };
 
-immutable struct Order(PriceType = DefaultPriceType,
+immutable struct Order(PriceType   = DefaultPriceType,
                        OrderIdType = DefaultOrderIdType ) {
-  alias PriceType PriceType_t;
+  alias PriceType   PriceType_t;
   alias OrderIdType OrderIdType_t;
   ulong       receivedTime;
   OrderIdType orderId;
@@ -93,6 +106,9 @@ struct Execution(PriceType = DefaultPriceType) {
 };
 
 alias Order!()      SimpleOrder;
+
+pragma(msg, "IsOrder ", IsOrder!SimpleOrder);
+
 alias OrderState!() SimpleOrderState;
 alias Execution!()  SimpleExecution;
 alias OrderManager!() SimpleOrderManager;
@@ -127,9 +143,8 @@ struct OrderManager(OrderType  = SimpleOrder,
   OrderState[] sells;
 
   mixin OrderHandling!();
-
   alias PriceType_t = OrderType.PriceType_t;
-
+  
   void onOrder(OrderType order) {
     //myClock++;
     auto side = order.side.isBuy() ? buys : sells;
@@ -159,7 +174,7 @@ struct OrderManager(OrderType  = SimpleOrder,
         typeof( PriceType_t.init * 0 ) totalFillVolume = 0;
         auto  fullFillIdx = 0;
         int[] fills;
-        while (fillIdx < oppositeSide.length && fillRemainQty>0) {
+        while ( fillIdx < oppositeSide.length && fillRemainQty>0 ) {
           auto matchOrder = oppositeSide[fillIdx];
           uint fillQty;
           if (matchOrder.orderQty > fillRemainQty) {
@@ -180,8 +195,11 @@ struct OrderManager(OrderType  = SimpleOrder,
         };
         buys = buys[fullFillIdx..$];
         writefln("Buys is now %s", buys);
-        handleExecution( SimpleExecution( totalFillQty, totalFillVolume / totalFillQty));
+        auto exec = SimpleExecution( totalFillQty, totalFillVolume / totalFillQty);
+        handleExecution(exec );
         if (buys.empty && fillRemainQty >0) {
+          buys ~= OrderState(order);
+          buys[0].handleExecution(exec);
         };
       }
     }
@@ -207,7 +225,7 @@ void main() {
     ulong clock;
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 21.0) );
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 100, OrderType.LIMIT, TimeInForce.DAY, 20.0));
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 200, OrderType.LIMIT, TimeInForce.DAY, 20.0));
   }
 };
 
