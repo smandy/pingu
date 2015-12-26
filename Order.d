@@ -50,6 +50,8 @@ template IsOrder(T) {
   }();
 }
 
+pragma(msg, "Size of simpleorder is " , SimpleOrder.sizeof);
+
 struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
   string toString() {
     return "OrderState("
@@ -63,7 +65,7 @@ struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
   
   alias typeof(OrderType.PriceType_t.init * 100.0) Volume;
   
-  pragma(msg, Volume);
+  //pragma(msg, Volume);
   
   OrderType order;
   uint      cumQty = 0;
@@ -71,7 +73,6 @@ struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
 
   this(OrderType o) {
     this.order = o;
-    writefln("Volums is %s", volume);
   };
   
   auto avgPx() { return cumQty==0 ? 0.0 : volume / cumQty; };
@@ -81,10 +82,8 @@ struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
   alias order this;
   
   void handleExecution(ExecType)(ExecType exec) {
-    writeln("HandleExecution " ~ to!string(exec));
     cumQty += exec.qty;
     volume += exec.qty * exec.lastPx;
-    writefln("I am now %s", toString());
   };
 };
 
@@ -109,7 +108,7 @@ struct Execution(PriceType = DefaultPriceType) {
 
 alias Order!()      SimpleOrder;
 
-pragma(msg, "IsOrder ", IsOrder!SimpleOrder);
+//pragma(msg, "IsOrder ", IsOrder!SimpleOrder);
 
 alias OrderState!() SimpleOrderState;
 alias Execution!()  SimpleExecution;
@@ -134,7 +133,7 @@ enum sellPred = "a.limitPx < b.limitPx && a.receivedTime < b.receivedTime";
 
 mixin template DefaultHandling() {
   void handleExecution(ExecType)(ExecType exec) {
-    writefln("Handle execution %s", exec);
+    // NOOP
   };
 };
 
@@ -154,23 +153,21 @@ struct OrderManager(OrderType  = SimpleOrder,
       if (sells.empty || order.limitPx < side[0].limitPx) {
         //Not crossing buy - go onto book
         size_t idx = side.getTransitionIndex!buyPred(order);
-        writefln("Adding to side %s", idx);
         (order.side.isBuy() ? buys : sells) = side[0..idx] ~ OrderState(order) ~ side[idx..$];
-        writefln("siide=%s buys=% sells=%s", side, buys, sells);
       } else {
         // TODO aggressive buy
       };
     } else {
       // enforce( !order.side.isBuy() , "Logic error");
-      writefln("buys is %s", buys);
+      // writefln("buys is %s", buys);
       if ( buys.empty || order.limitPx > buys[0].limitPx ) {
         (order.side.isBuy() ? buys : sells) ~= OrderState(order);
         // TODO Not crossing sell - go onto book
-        writefln("Not Crossing sell");
+        //writefln("Not Crossing sell");
       } else {
         auto oppositeSide = order.side.isBuy() ? sells : buys;
-        writefln("Crossing sell sidelength=%s", oppositeSide.length);
-        enforce( !order.side.isBuy(), "Logic error");
+        //writefln("Crossing sell sidelength=%s", oppositeSide.length);
+        //enforce( !order.side.isBuy(), "Logic error");
         uint fillRemainQty = order.orderQty;
         auto fillIdx = 0;
         auto totalFillQty = 0;
@@ -192,12 +189,12 @@ struct OrderManager(OrderType  = SimpleOrder,
           totalFillVolume += fillQty * matchOrder.limitPx;
           fillIdx++;
         }
-        writefln("FillIdx %s", fillIdx);
+        //writefln("FillIdx %s", fillIdx);
         for (int i = 0;i< fillIdx;++i) {
           buys[i].handleExecution( SimpleExecution( fills[i], buys[i].limitPx) );
         };
         buys = buys[fullFillIdx..$];
-        writefln("Buys is now %s", buys);
+        //writefln("Buys is now %s", buys);
         auto exec = SimpleExecution( totalFillQty, totalFillVolume / totalFillQty);
         handleExecution(exec );
         if (buys.empty && fillRemainQty >0) {
@@ -209,40 +206,45 @@ struct OrderManager(OrderType  = SimpleOrder,
   }
 }
 
-void main() {
-  writeln("Doit");
-  SimpleOrder.OrderIdType_t orderId;
-  auto SECID = 66;
+mixin template SimpleBuyTest() {
+  void start() {
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
+  };
+};
 
-  if (false) {
-    SimpleOrderManager om;
-    
-    ulong clock;
+mixin template TestTwo() {
+  void start() {
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 20.0)  );
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 21.0)  );
     om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 200, OrderType.LIMIT, TimeInForce.DAY, 20.0) );
-  }
-
-  {
-    SimpleOrderManager om;
-    ulong clock;
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 21.0) );
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 200, OrderType.LIMIT, TimeInForce.DAY, 20.0));
-    writefln("Final om state %s" , om);
-  }
+  };
 };
 
-unittest {
+struct SimpleTest(alias TestType) {
+  SimpleOrder.OrderIdType_t orderId;
+  auto SECID = 66;
+  SimpleOrderManager om;
+  ulong clock;
+
+  mixin TestType!();
 };
+
+void main() {
+  SimpleTest!TestTwo().start();
+
+  SimpleTest!SimpleBuyTest().start();
+};
+
 
 unittest {
   import std.stdio;
   ulong clock;
   
-  immutable Order!() x  = { clock++, Side.BUY, 100, 6066, OrderType.MARKET, TimeInForce.DAY, 0.0  };
-  Order!(int)        x2 = { clock++, Side.BUY, 100, 6066, OrderType.MARKET, TimeInForce.DAY, 20   };
-  SimpleOrder        x3 = { clock++, Side.BUY, 100, 6066, OrderType.MARKET, TimeInForce.DAY, 20.0 };
+  SimpleOrder.OrderIdType_t orderId;
+  
+  immutable Order!() x  = { clock++, Side.BUY, orderId++, 6066, OrderType.MARKET, TimeInForce.DAY, 0.0  };
+  Order!(int)        x2 = { clock++, Side.BUY, orderId++, 6066, OrderType.MARKET, TimeInForce.DAY, 20   };
+  SimpleOrder        x3 = { clock++, Side.BUY, orderId++, 6066, OrderType.MARKET, TimeInForce.DAY, 20.0 };
 
   SimpleOrderState os = SimpleOrderState(x3);
   auto exec           = SimpleExecution(25, 25.0);
