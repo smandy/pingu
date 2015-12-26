@@ -106,26 +106,26 @@ size_t getTransitionIndex(alias test, V, Range)(Range xs, V v) {
   return first;
 }
 
-enum buyPred = "a.limitPx>b.limitPx && a.receivedTime<b.receivedTime";
+enum buyPred  = "a.limitPx > b.limitPx && a.receivedTime < b.receivedTime";
+enum sellPred = "a.limitPx < b.limitPx && a.receivedTime < b.receivedTime";
 
-struct DefaultHandler {
+mixin template DefaultHandling() {
   void handleExecution(ExecType)(ExecType exec) {
     writefln("Handle execution %s", exec);
   };
 };
 
-struct OrderManager(OrderType   = SimpleOrder,
-                    OrderState  = OrderState!OrderType, Handler = DefaultHandler) {
+struct OrderManager(OrderType  = SimpleOrder,
+                    OrderState = OrderState!OrderType,
+                    alias OrderHandling = DefaultHandling) {
   OrderState[] buys;
   OrderState[] sells;
 
+  mixin OrderHandling!();
+
   alias PriceType_t = OrderType.PriceType_t;
 
-  Handler handler;
-  
-  //ulong myClock = 0L;
-  
-  void onOrder(alias HandlerType = DefaultHandler)(OrderType order) {
+  void onOrder(OrderType order) {
     //myClock++;
     auto side = order.side.isBuy() ? buys : sells;
     if (order.side.isBuy) {
@@ -175,7 +175,7 @@ struct OrderManager(OrderType   = SimpleOrder,
         };
         buys = buys[fullFillIdx..$];
         writefln("Buys is now %s", buys);
-        handler.handleExecution( SimpleExecution( totalFillQty, totalFillVolume / totalFillQty));
+        handleExecution( SimpleExecution( totalFillQty, totalFillVolume / totalFillQty));
         if (buys.empty && fillRemainQty >0) {
         };
       }
@@ -224,13 +224,13 @@ unittest {
   ulong clock;
   
   immutable Order!() x  = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 0.0  };
-  Order!(int)    x2 = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20   };
-  SimpleOrder    x3 = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20.0 };
+  Order!(int)        x2 = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20   };
+  SimpleOrder        x3 = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20.0 };
 
   SimpleOrderState os = SimpleOrderState(x3);
-  auto exec = SimpleExecution(25, 25.0);
-  auto exec2 = SimpleExecution(30, 26.0);
-
+  auto exec           = SimpleExecution(25, 25.0);
+  auto exec2          = SimpleExecution(30, 26.0);
+  
   os.handleExecution( exec  );
   os.handleExecution( exec2 );
 
