@@ -8,6 +8,7 @@ import std.functional;
 import std.exception;
 
 alias double DefaultPriceType;
+alias ulong  DefaultOrderIdType;
 alias ulong  TimeType;
 
 enum OrderType {
@@ -35,8 +36,7 @@ bool isBuy( Side s ) {
   };
 };
 
-struct OrderState(OrderType = Order!()) {
-
+struct OrderState(OrderType = SimpleOrder) {
   string toString() {
     return "OrderState("
       ~ to!string(order)
@@ -69,12 +69,17 @@ struct OrderState(OrderType = Order!()) {
     writeln("HandleExecution " ~ to!string(exec));
     cumQty += exec.qty;
     volume += exec.qty * exec.lastPx;
+    writefln("I am now %s", toString());
   };
 };
 
-immutable struct Order(PriceType = DefaultPriceType) {
+immutable struct Order(PriceType = DefaultPriceType,
+                       OrderIdType = DefaultOrderIdType ) {
   alias PriceType PriceType_t;
-  ulong receivedTime;
+  alias OrderIdType OrderIdType_t;
+  ulong       receivedTime;
+  OrderIdType orderId;
+  uint        secId;
   Side        side;
   int         orderQty;
   OrderType   orderType;
@@ -185,35 +190,25 @@ struct OrderManager(OrderType  = SimpleOrder,
 
 void main() {
   writeln("Doit");
+  SimpleOrder.OrderIdType_t orderId;
+  auto SECID = 66;
 
   if (false) {
     SimpleOrderManager om;
+    
     ulong clock;
-    om.onOrder( SimpleOrder(clock, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 20.0)  );
-    om.onOrder( SimpleOrder(clock, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 21.0)  );
-    om.onOrder( SimpleOrder(clock, Side.SELL, 200, OrderType.LIMIT, TimeInForce.DAY, 20.0) );
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 20.0)  );
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 21.0)  );
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 200, OrderType.LIMIT, TimeInForce.DAY, 20.0) );
   }
 
-
-  
-  
   {
-
-    struct MyHandler {
-      void handleExecution(ExecType)(ExecType exec) {
-        writefln("Handle Execution %s" , exec);
-      };
-    };
-    
-    MyHandler handler;
-    
     SimpleOrderManager om;
     ulong clock;
-    om.onOrder( SimpleOrder(clock, Side.BUY, 25, OrderType.LIMIT, TimeInForce.DAY, 20.0) );
-    om.onOrder( SimpleOrder(clock, Side.BUY, 25, OrderType.LIMIT, TimeInForce.DAY, 21.0) );
-    om.onOrder( SimpleOrder(clock, Side.SELL, 100, OrderType.LIMIT, TimeInForce.DAY, 20.0));
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 21.0) );
+    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 100, OrderType.LIMIT, TimeInForce.DAY, 20.0));
   }
-
 };
 
 unittest {
@@ -223,9 +218,9 @@ unittest {
   import std.stdio;
   ulong clock;
   
-  immutable Order!() x  = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 0.0  };
-  Order!(int)        x2 = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20   };
-  SimpleOrder        x3 = { clock++, Side.BUY, 100, OrderType.MARKET, TimeInForce.DAY, 20.0 };
+  immutable Order!() x  = { clock++, Side.BUY, 100, 6066, OrderType.MARKET, TimeInForce.DAY, 0.0  };
+  Order!(int)        x2 = { clock++, Side.BUY, 100, 6066, OrderType.MARKET, TimeInForce.DAY, 20   };
+  SimpleOrder        x3 = { clock++, Side.BUY, 100, 6066, OrderType.MARKET, TimeInForce.DAY, 20.0 };
 
   SimpleOrderState os = SimpleOrderState(x3);
   auto exec           = SimpleExecution(25, 25.0);
