@@ -65,8 +65,6 @@ struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
   
   alias typeof(OrderType.PriceType_t.init * 100.0) Volume;
   
-  //pragma(msg, Volume);
-  
   OrderType order;
   uint      cumQty = 0;
   Volume    volume = 0.0;
@@ -128,7 +126,7 @@ size_t getTransitionIndex(alias test, V, Range)(Range xs, V v) {
   return first;
 }
 
-enum buyPred  = "a.limitPx > b.limitPx && a.receivedTime < b.receivedTime";
+enum buyPred  = "a.limitPx < b.limitPx || ( a.limitPx==b.limitPx && a.receivedTime<b.receivedTime)";
 enum sellPred = "a.limitPx < b.limitPx && a.receivedTime < b.receivedTime";
 
 mixin template NoopHandling() {
@@ -162,15 +160,16 @@ struct OrderManager(OrderType  = SimpleOrder,
 
   version (diagnostic) {
     void dump() {
-      writeln("\nBUYS\n########################################");
+      writeln("\n   BUYS\n   ########################################");
       foreach( buy ; buys ) {
-        writeln(buy);
+        writefln("   %s", buy);
       };
       
-      writeln("\nSELLS\n########################################");
+      writeln("\n   SELLS\n   ########################################");
       foreach( sell ; sells ) {
-        writeln(sell);
+        writefln("   %s" , sell);
       };
+      write("\n\n");
     };
   };
   
@@ -205,6 +204,15 @@ struct OrderManager(OrderType  = SimpleOrder,
         int[] fills;
         while ( fillIdx < oppositeSide.length && fillRemainQty > 0 ) {
           auto matchOrder = oppositeSide[fillIdx];
+          writefln("fillIdx=%s fillRemain=%s matchOrder=%s", fillIdx, fillRemainQty, matchOrder);
+          
+          if (matchOrder.limitPx < order.limitPx) {
+            // Backtrack
+            writefln("Bottom out");
+            fillIdx--;
+            break;
+          };
+          
           uint fillQty;
           if (matchOrder.orderQty > fillRemainQty) {
             fillQty = fillRemainQty;
@@ -218,18 +226,27 @@ struct OrderManager(OrderType  = SimpleOrder,
           totalFillVolume += fillQty * matchOrder.limitPx;
           fillIdx++;
         }
-        //writefln("FillIdx %s", fillIdx);
+
+
+        /// DEAL WITH PASSIVE SIDE
         for (int i = 0;i< fillIdx;++i) {
           buys[i].handleExecution( SimpleExecution( fills[i], buys[i].limitPx) );
         };
+        
         buys = buys[fullFillIdx..$];
         //writefln("Buys is now %s", buys);
         auto exec = SimpleExecution( totalFillQty, totalFillVolume / totalFillQty);
         handleExecution(exec );
+
         if (buys.empty && fillRemainQty >0) {
           buys ~= OrderState(order);
           buys[0].handleExecution(exec);
         };
+
+        if (fillRemainQty > 0 ) {
+        };
+
+        
       }
     }
   }
@@ -242,6 +259,9 @@ version (unittest) {
     void start() {
       om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
     };
+
+    void test() {
+    };
   };
 
   mixin template CaseTwo() {
@@ -250,7 +270,9 @@ version (unittest) {
       seed( 100 , Side.BUY  , 20.0);
       seed( 1000, Side.BUY  , 21.0);
       seed( 200 , Side.SELL , 20.0);
-      
+    }
+
+    void test() {
       enforce( om.sells.empty, "Logic error");
       enforce( om.buys.length == 1 );
       auto theBuy = om.buys[0];
@@ -266,16 +288,36 @@ version (unittest) {
       seed( 100 , Side.BUY  , 20.0);
       seed( 100 , Side.BUY  , 21.0);
       seed( 200 , Side.SELL , 21.0);
-      
-      enforce( om.sells.length == 1 );
-      enforce( om.buys.length  == 1 );
+    };
+
+    void test() {
+      enforce( om.sells.empty );
+      enforce( om.buys.empty  == 1 );
       auto theBuy = om.buys[0];
       enforce( theBuy.leavesQty == 1000 , "Incorrect leaves");
       enforce( theBuy.cumQty    == 0 , "Incorrect avgPx ");
     };
   };
 
-  
+  mixin template BasicSeeding() {
+    enum name = "BasicSeeding";
+    void start() {
+      seed( 100  , Side.BUY  , 20.0);
+      seed( 100  , Side.BUY  , 23.0);
+      seed( 100  , Side.BUY  , 21.0);
+      seed( 101  , Side.BUY  , 21.0);
+      seed( 102  , Side.BUY  , 21.0);
+      seed( 103  , Side.BUY  , 21.0);
+      seed( 1901 , Side.BUY  , 19.0);
+      seed( 1902 , Side.BUY  , 19.0);
+      seed( 1903 , Side.BUY  , 19.0);
+      seed( 2102 , Side.BUY  , 21.0);
+      seed( 100  , Side.BUY  , 18.0);
+    };
+    
+    void test() {};
+  };
+
   struct SimpleTest(alias TestType) {
     SimpleOrder.OrderIdType_t orderId;
     alias SimpleOrder.PriceType_t PriceType;
@@ -286,22 +328,31 @@ version (unittest) {
     mixin TestType!();
 
     void seed( int qty, Side side, PriceType px) {
+      writefln("Seeding %s %s %s", qty, side, px);
       om.onOrder( SimpleOrder(clock, orderId++, SECID, side, qty, OrderType.LIMIT, TimeInForce.DAY, px)  );
+      om.dump();
     };
 
     void run() {
       writefln("Running Test Case %s", name);
       writeln("=====================");
+
       
       start();
-      om.dump();
+      //om.dump();
+
+      writeln("TESTING");
+      writeln("=======");
+      test();
+      writeln("[ OK ]");
     };
   };
 }
 
 unittest {
-  SimpleTest!CaseTwo().run();
-  SimpleTest!SimpleBuyTest().run();
+  //SimpleTest!CaseTwo().run();
+  //SimpleTest!SimpleBuyTest().run();
   SimpleTest!CaseThree().run();
+  //SimpleTest!BasicSeeding().run();
 };
 
