@@ -13,14 +13,14 @@ alias ulong  DefaultOrderIdType;
 alias ulong  DefaultTimeType;
 
 enum OrderType {
-    MARKET,
-    LIMIT
+  MARKET,
+  LIMIT
 };
 
 enum TimeInForce {
-    DAY,
-    IOC,
-    GTC
+  DAY,
+  IOC,
+  GTC
 };
 
 enum Side {
@@ -75,9 +75,9 @@ struct OrderState(OrderType = SimpleOrder) if (IsOrder!OrderType) {
     this.order = o;
   };
   
-  auto avgPx() { return cumQty==0 ? 0.0 : volume / cumQty; };
+  @property auto avgPx() { return cumQty==0 ? 0.0 : volume / cumQty; };
   
-  auto leavesQty() { return orderQty - cumQty; }; // TODO cancel
+  @property auto leavesQty() { return orderQty - cumQty; }; // TODO cancel
 
   alias order this;
   
@@ -131,11 +131,24 @@ size_t getTransitionIndex(alias test, V, Range)(Range xs, V v) {
 enum buyPred  = "a.limitPx > b.limitPx && a.receivedTime < b.receivedTime";
 enum sellPred = "a.limitPx < b.limitPx && a.receivedTime < b.receivedTime";
 
-mixin template DefaultHandling() {
+mixin template NoopHandling() {
   void handleExecution(ExecType)(ExecType exec) {
     // NOOP
   };
 };
+
+mixin template VerboseHandling() {
+  void handleExecution(ExecType)(ExecType exec) {
+    writefln("Execution %s", exec);
+  };
+};
+
+version(unittest) {
+  alias DefaultHandling = VerboseHandling;
+} else {
+  alias DefaultHandling = NoopHandling;
+ };
+
 
 struct OrderManager(OrderType  = SimpleOrder,
                     OrderState = OrderState!OrderType,
@@ -145,10 +158,26 @@ struct OrderManager(OrderType  = SimpleOrder,
 
   mixin OrderHandling!();
   alias PriceType_t = OrderType.PriceType_t;
+
+
+  version (diagnostic) {
+    void dump() {
+      writeln("\nBUYS\n########################################");
+      foreach( buy ; buys ) {
+        writeln(buy);
+      };
+      
+      writeln("\nSELLS\n########################################");
+      foreach( sell ; sells ) {
+        writeln(sell);
+      };
+    };
+  };
   
   void onOrder(OrderType order) {
     //myClock++;
     auto side = order.side.isBuy() ? buys : sells;
+
     if (order.side.isBuy) {
       if (sells.empty || order.limitPx < side[0].limitPx) {
         //Not crossing buy - go onto book
@@ -174,7 +203,7 @@ struct OrderManager(OrderType  = SimpleOrder,
         typeof( PriceType_t.init * 0 ) totalFillVolume = 0;
         auto  fullFillIdx = 0;
         int[] fills;
-        while ( fillIdx < oppositeSide.length && fillRemainQty>0 ) {
+        while ( fillIdx < oppositeSide.length && fillRemainQty > 0 ) {
           auto matchOrder = oppositeSide[fillIdx];
           uint fillQty;
           if (matchOrder.orderQty > fillRemainQty) {
@@ -206,56 +235,73 @@ struct OrderManager(OrderType  = SimpleOrder,
   }
 }
 
-mixin template SimpleBuyTest() {
-  void start() {
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
+version (unittest) {
+  mixin template SimpleBuyTest() {
+    enum name = "SimpleBuyTest";
+    
+    void start() {
+      om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 25, OrderType.LIMIT,   TimeInForce.DAY, 20.0) );
+    };
   };
-};
 
-mixin template TestTwo() {
-  void start() {
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 20.0)  );
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.BUY, 100, OrderType.LIMIT, TimeInForce.DAY, 21.0)  );
-    om.onOrder( SimpleOrder(clock, orderId++, SECID, Side.SELL, 200, OrderType.LIMIT, TimeInForce.DAY, 20.0) );
+  mixin template CaseTwo() {
+    enum name = "CaseTwo";
+    void start() {
+      seed( 100 , Side.BUY  , 20.0);
+      seed( 1000, Side.BUY  , 21.0);
+      seed( 200 , Side.SELL , 20.0);
+      
+      enforce( om.sells.empty, "Logic error");
+      enforce( om.buys.length == 1 );
+      auto theBuy = om.buys[0];
+      enforce( theBuy.leavesQty == 900 , "Incorrect leaves");
+      enforce( theBuy.avgPx     == 21.0, "Incorrect avgPx");
+      enforce( theBuy.cumQty    == 100 , "Incorrect avgPx ");
+    };
   };
-};
 
-struct SimpleTest(alias TestType) {
-  SimpleOrder.OrderIdType_t orderId;
-  auto SECID = 66;
-  SimpleOrderManager om;
-  ulong clock;
+  mixin template CaseThree() {
+    enum name = "CaseThree";
+    void start() {
+      seed( 100 , Side.BUY  , 20.0);
+      seed( 100 , Side.BUY  , 21.0);
+      seed( 200 , Side.SELL , 21.0);
+      
+      enforce( om.sells.length == 1 );
+      enforce( om.buys.length  == 1 );
+      auto theBuy = om.buys[0];
+      enforce( theBuy.leavesQty == 1000 , "Incorrect leaves");
+      enforce( theBuy.cumQty    == 0 , "Incorrect avgPx ");
+    };
+  };
 
-  mixin TestType!();
-};
+  
+  struct SimpleTest(alias TestType) {
+    SimpleOrder.OrderIdType_t orderId;
+    alias SimpleOrder.PriceType_t PriceType;
+    
+    auto SECID = 66;
+    SimpleOrderManager om;
+    ulong clock;
+    mixin TestType!();
 
-void main() {
-  SimpleTest!TestTwo().start();
+    void seed( int qty, Side side, PriceType px) {
+      om.onOrder( SimpleOrder(clock, orderId++, SECID, side, qty, OrderType.LIMIT, TimeInForce.DAY, px)  );
+    };
 
-  SimpleTest!SimpleBuyTest().start();
-};
-
+    void run() {
+      writefln("Running Test Case %s", name);
+      writeln("=====================");
+      
+      start();
+      om.dump();
+    };
+  };
+}
 
 unittest {
-  import std.stdio;
-  ulong clock;
-  
-  SimpleOrder.OrderIdType_t orderId;
-  
-  immutable Order!() x  = { clock++, Side.BUY, orderId++, 6066, OrderType.MARKET, TimeInForce.DAY, 0.0  };
-  Order!(int)        x2 = { clock++, Side.BUY, orderId++, 6066, OrderType.MARKET, TimeInForce.DAY, 20   };
-  SimpleOrder        x3 = { clock++, Side.BUY, orderId++, 6066, OrderType.MARKET, TimeInForce.DAY, 20.0 };
-
-  SimpleOrderState os = SimpleOrderState(x3);
-  auto exec           = SimpleExecution(25, 25.0);
-  auto exec2          = SimpleExecution(30, 26.0);
-  
-  os.handleExecution( exec  );
-  os.handleExecution( exec2 );
-
-  writefln("Order is %s"     , x  );
-  writefln("Order2 is %s"    , x2 );
-  writefln("Order3 is %s"    , x3 );
-  writefln("OrderState is %s", os );
-  writefln("AvgPx is %s", os.avgPx());
+  SimpleTest!CaseTwo().run();
+  SimpleTest!SimpleBuyTest().run();
+  SimpleTest!CaseThree().run();
 };
+

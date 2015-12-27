@@ -30,7 +30,6 @@ auto doit(string x) {
   return x.map!( (dchar x) { return format("%s%s", x , x) ; } ).array;
 };
 
-
 auto boit(ReturnType!doit s) {
   return s.map!( x => x.length ).array;
 };
@@ -39,8 +38,8 @@ auto goit( ReturnType!boit s) {
   return "Goit(" ~ to!string(s) ~ ")";
 };
 
-pragma(msg, "doit " , ReturnType!doit);
-pragma(msg, "boit " , ReturnType!boit);
-pragma(msg, "boit " , ReturnType!goit);
+// pragma(msg, "doit " , ReturnType!doit);
+// pragma(msg, "boit " , ReturnType!boit);
+// pragma(msg, "boit " , ReturnType!goit);
 
 
