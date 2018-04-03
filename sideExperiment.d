@@ -9,7 +9,7 @@ import std.functional : binaryFun;
 struct SimpleOrder {
   ulong  time;
   double price;
-};
+}x
 
 unittest {
   SimpleOrder[] orders;
@@ -19,7 +19,7 @@ unittest {
     //writefln("Idx is %s", idx);
     orders = orders[0..idx] ~ [o] ~ orders[idx..$]; //assumeSorted([o]); // .assumeSorted;
     writefln("Orders is %s", orders);
-  };
+  }
   
   auto idx = 0;
   
@@ -32,8 +32,8 @@ unittest {
   
   foreach ( ref o ; orders2) {
     onOrder(o);
-  };
+  }
   
   orders2.sort!buyPred;
   writefln("Resorted is now %s", orders2);
-};
+}

@@ -9,4 +9,4 @@ void main() {
     .map!( compose!("a+1", "a*2", "a-5", "a % 10") )
     .writeln;
   //iota(1,10)
-};
+}
